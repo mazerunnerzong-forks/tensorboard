@@ -35,13 +35,13 @@ describe('line_chart_v2/lib/integration test', () => {
       onDrawEnd: jasmine.createSpy(),
     };
     chart = new Chart({
-      xScaleType: ScaleType.LINEAR,
-      yScaleType: ScaleType.LINEAR,
       type: RendererType.SVG,
       container: dom,
       callbacks,
       domDimension: {width: 200, height: 100},
     });
+    chart.setXScaleType(ScaleType.LINEAR);
+    chart.setYScaleType(ScaleType.LINEAR);
   });
 
   describe('render', () => {

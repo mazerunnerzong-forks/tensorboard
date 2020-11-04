@@ -59,9 +59,6 @@ export class Chart implements IChart {
       }
     }
 
-    this.setXScaleType(option.xScaleType);
-    this.setYScaleType(option.yScaleType);
-
     this.seriesLineView = new SeriesLineView({
       renderer: this.renderer,
       coordinator: this.coordinator,

@@ -19,30 +19,212 @@ import {
 } from './line_chart_internal_utils';
 import * as libUtils from './lib/utils';
 import {RendererType} from './lib/public_types';
+import {buildSeries, buildMetadata} from './lib/testing';
 
-fdescribe('line_chart_v2/line_chart_internal_utils test', () => {
+describe('line_chart_v2/line_chart_internal_utils test', () => {
   describe('#computeDataSeriesExtent', () => {
     it('returns min and max from all series', () => {
-      computeDataSeriesExtent(
+      const actual = computeDataSeriesExtent(
         [
-          {
+          buildSeries({
             id: 'foo',
             points: [
               {x: 1, y: -1},
               {x: 2, y: -10},
               {x: 3, y: 100},
             ],
-          },
+          }),
+          buildSeries({
+            id: 'bar',
+            points: [
+              {x: -100, y: 0},
+              {x: 0, y: -1},
+              {x: -1000, y: 1},
+            ],
+          }),
         ],
         {
-          foo: {
-            id: 'foo',
-            displayName: 'foo',
-            visible: true,
-            color: '#f00',
-          },
+          foo: buildMetadata({id: 'foo', visible: true}),
+          bar: buildMetadata({id: 'bar', visible: true}),
         }
       );
+
+      expect(actual).toEqual({x: [-1000, 3], y: [-10, 100]});
+    });
+
+    it('handles single dataSeries point', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [{x: 1, y: -1}],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo', visible: true}),
+        }
+      );
+
+      expect(actual).toEqual({x: [1, 1], y: [-1, -1]});
+    });
+
+    it('ignores dataseries that is visibility=false', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [
+              {x: 1, y: -1},
+              {x: 2, y: -10},
+              {x: 3, y: 100},
+            ],
+          }),
+          buildSeries({
+            id: 'bar',
+            points: [
+              {x: -100, y: 0},
+              {x: -1000, y: 1},
+            ],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo', visible: true}),
+          bar: buildMetadata({id: 'bar', visible: false}),
+        }
+      );
+
+      expect(actual).toEqual({x: [1, 3], y: [-10, 100]});
+    });
+
+    it('ignores dataseries that is aux', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [
+              {x: 1, y: -1},
+              {x: 2, y: -10},
+              {x: 3, y: 100},
+            ],
+          }),
+          buildSeries({
+            id: 'bar',
+            points: [
+              {x: -100, y: 0},
+              {x: -1000, y: 1},
+            ],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo', visible: true, aux: true}),
+          bar: buildMetadata({id: 'bar'}),
+        }
+      );
+
+      expect(actual).toEqual({x: [-1000, -100], y: [0, 1]});
+    });
+
+    it('ignores dataseries without metadata', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({id: 'foo', points: [{x: 1, y: -1}]}),
+          buildSeries({
+            id: 'bar',
+            points: [
+              {x: -100, y: 0},
+              {x: -1000, y: 1},
+            ],
+          }),
+        ],
+        {
+          bar: buildMetadata({id: 'bar'}),
+        }
+      );
+
+      expect(actual).toEqual({x: [-1000, -100], y: [0, 1]});
+    });
+
+    it('filters out NaN and keeps infinity', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [
+              {x: 1, y: -1},
+              {x: 2, y: Infinity},
+              {x: 3, y: NaN},
+              {x: 4, y: -1},
+            ],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo'}),
+        }
+      );
+
+      expect(actual).toEqual({x: [1, 4], y: [-1, Infinity]});
+    });
+
+    it('returns infinities when nothing is visible', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [
+              {x: 1, y: -1},
+              {x: 2, y: -10},
+              {x: 3, y: 100},
+            ],
+          }),
+          buildSeries({
+            id: 'bar',
+            points: [
+              {x: -100, y: 0},
+              {x: -1000, y: 1},
+            ],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo', visible: false}),
+          bar: buildMetadata({id: 'bar', visible: false}),
+        }
+      );
+
+      expect(actual).toEqual({
+        x: [-Infinity, Infinity],
+        y: [-Infinity, Infinity],
+      });
+    });
+
+    it('returns infinities when dataSeries is empty', () => {
+      const actual = computeDataSeriesExtent([], {});
+
+      expect(actual).toEqual({
+        x: [-Infinity, Infinity],
+        y: [-Infinity, Infinity],
+      });
+    });
+
+    it('returns infinities when dataSeries is all NaN', () => {
+      const actual = computeDataSeriesExtent(
+        [
+          buildSeries({
+            id: 'foo',
+            points: [
+              {x: NaN, y: NaN},
+              {x: NaN, y: NaN},
+            ],
+          }),
+        ],
+        {
+          foo: buildMetadata({id: 'foo', visible: true}),
+        }
+      );
+
+      expect(actual).toEqual({
+        x: [-Infinity, Infinity],
+        y: [-Infinity, Infinity],
+      });
     });
   });
 

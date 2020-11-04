@@ -28,7 +28,6 @@ import {
 
 import {Chart} from './lib/chart';
 import {IChart} from './lib/chart_types';
-import {createScale, Scale} from './lib/scale';
 import {
   ChartCallbacks,
   ChartOption,
@@ -38,6 +37,7 @@ import {
   RendererType,
   ScaleType,
 } from './lib/public_types';
+import {createScale, Scale} from './lib/scale';
 import {
   areExtentsEqual,
   isOffscreenCanvasSupported,
@@ -63,53 +63,7 @@ interface DomDimensions {
 @Component({
   selector: 'line-chart',
   templateUrl: 'line_chart_component.ng.html',
-  styles: [
-    `
-      :host {
-        contain: strict;
-        height: 100%;
-        width: 100%;
-      }
-
-      .container {
-        background: #fff;
-        display: grid;
-        height: 100%;
-        overflow: hidden;
-        width: 100%;
-        grid-template-areas:
-          'yaxis series'
-          '. xaxis';
-        grid-template-columns: 50px 1fr;
-        grid-auto-rows: 1fr 30px;
-      }
-
-      .series-view {
-        grid-area: series;
-        position: relative;
-        overflow: hidden;
-      }
-
-      canvas,
-      svg,
-      line-chart-grid-view,
-      line-chart-interactive-layer {
-        height: 100%;
-        left: 0;
-        position: absolute;
-        top: 0;
-        width: 100%;
-      }
-
-      line-chart-x-axis {
-        grid-area: xaxis;
-      }
-
-      line-chart-y-axis {
-        grid-area: yaxis;
-      }
-    `,
-  ],
+  styleUrls: ['line_chart_component.css'],
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
@@ -128,7 +82,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   private chartEl?: ElementRef<HTMLCanvasElement | SVGElement>;
 
   @Input()
-  readonly preferredRendererType: RendererType = isWebGl2Supported()
+  preferredRendererType: RendererType = isWebGl2Supported()
     ? RendererType.WEBGL
     : RendererType.SVG;
 
@@ -136,7 +90,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   seriesData!: DataSeries[];
 
   @Input()
-  defaultViewExtent?: Extent;
+  defaultViewBox?: Extent;
 
   @Input()
   seriesMetadataMap!: DataSeriesMetadataMap;
@@ -155,7 +109,7 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
 
   xScale: Scale = createScale(this.xScaleType);
   yScale: Scale = createScale(this.xScaleType);
-  viewExtent: Extent = DEFAULT_EXTENT;
+  viewBox: Extent = DEFAULT_EXTENT;
 
   domDimensions: DomDimensions = {
     main: {width: 0, height: 0},
@@ -164,29 +118,29 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
   };
 
   private lineChart?: IChart;
-  private dataExtent?: Extent;
+  private dataExtent: Extent = DEFAULT_EXTENT;
   private isDataUpdated = false;
   private isMetadataUpdated = false;
   // Must set the default view extent since it is an optional input.
   private isViewExtentUpdated = true;
   private isDefaultViewExtentUpdated = false;
-  private maybeSetViewExtentToDefault = true;
+  private maybeSetViewBoxToDefault = true;
+  private scaleUpdated = false;
 
   constructor(private readonly changeDetector: ChangeDetectorRef) {}
 
   ngOnChanges(changes: SimpleChanges) {
+    // OnChanges only decides whether props need to be updated and do not directly update
+    // the line chart.
+
     if (changes['xScaleType']) {
       this.xScale = createScale(this.xScaleType);
-      if (this.lineChart) {
-        this.lineChart.setXScaleType(this.xScaleType);
-      }
+      this.scaleUpdated = true;
     }
 
     if (changes['yScaleType']) {
       this.yScale = createScale(this.yScaleType);
-      if (this.lineChart) {
-        this.lineChart.setYScaleType(this.yScaleType);
-      }
+      this.scaleUpdated = true;
     }
 
     if (changes['seriesData']) {
@@ -201,14 +155,14 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.isMetadataUpdated = true;
     }
 
-    this.maybeSetViewExtentToDefault = this.shouldResetViewExtent(changes);
+    this.maybeSetViewBoxToDefault = this.shouldResetViewExtent(changes);
 
-    this.updateProp();
+    this.updateLineChart();
   }
 
   ngAfterViewInit() {
     this.initializeChart();
-    this.updateProp();
+    this.updateLineChart();
   }
 
   onViewResize() {
@@ -224,10 +178,10 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       return true;
     }
 
-    const prevDefaultExtent = this.getDefaultViewExtent();
+    const prevDefaultExtent = this.getDefaultViewBox();
     const wasViewExtentChanged = !areExtentsEqual(
       prevDefaultExtent,
-      this.viewExtent
+      this.viewBox
     );
 
     // Don't modify view extent if user has manually changed the view box.
@@ -271,8 +225,6 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
           container: this.chartEl!.nativeElement as SVGElement,
           callbacks,
           domDimension: this.domDimensions.main,
-          xScaleType: this.xScaleType,
-          yScaleType: this.yScaleType,
         };
         break;
       }
@@ -283,8 +235,6 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
           devicePixelRatio: window.devicePixelRatio,
           callbacks,
           domDimension: this.domDimensions.main,
-          xScaleType: this.xScaleType,
-          yScaleType: this.yScaleType,
         };
         break;
     }
@@ -325,17 +275,18 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
     };
   }
 
-  private updateProp() {
+  private updateLineChart() {
     if (!this.lineChart) return;
 
-    if (this.isMetadataUpdated || this.isDataUpdated) {
+    if (this.scaleUpdated) {
+      this.scaleUpdated = false;
+      this.lineChart.setXScaleType(this.xScaleType);
+      this.lineChart.setYScaleType(this.yScaleType);
+    }
+
+    if (this.isMetadataUpdated) {
       this.isMetadataUpdated = false;
-      const metadata: DataSeriesMetadataMap = {};
-      // Copy over only what is required.
-      this.seriesData.forEach(({id}) => {
-        metadata[id] = this.seriesMetadataMap[id];
-      });
-      this.lineChart.updateMetadata(metadata);
+      this.lineChart.updateMetadata(this.seriesMetadataMap);
     }
 
     if (this.isDataUpdated) {
@@ -343,46 +294,49 @@ export class LineChartComponent implements AfterViewInit, OnChanges, OnDestroy {
       this.lineChart.updateData(this.seriesData);
     }
 
-    let viewExtentChange =
+    // There are below conditions in which the viewExtent changes.
+    const viewBoxChange =
       this.isDefaultViewExtentUpdated ||
       this.isViewExtentUpdated ||
-      this.maybeSetViewExtentToDefault;
-    if (this.isDefaultViewExtentUpdated && this.defaultViewExtent) {
-      this.viewExtent = this.defaultViewExtent;
-    } else if (this.maybeSetViewExtentToDefault) {
-      this.dataExtent = computeDataSeriesExtent(
+      this.maybeSetViewBoxToDefault;
+
+    if (this.isDefaultViewExtentUpdated && this.defaultViewBox) {
+      this.viewBox = this.defaultViewBox;
+    } else if (this.maybeSetViewBoxToDefault) {
+      const dataExtent = computeDataSeriesExtent(
         this.seriesData,
         this.seriesMetadataMap
       );
-      this.viewExtent = this.getDefaultViewExtent();
+
+      this.dataExtent = {
+        x: dataExtent.x ?? DEFAULT_EXTENT.x,
+        y: dataExtent.y ?? DEFAULT_EXTENT.y,
+      };
+      this.viewBox = this.getDefaultViewBox();
     }
 
-    if (viewExtentChange) {
+    if (viewBoxChange) {
       this.isDefaultViewExtentUpdated = false;
       this.isViewExtentUpdated = false;
-      this.maybeSetViewExtentToDefault = false;
-      this.lineChart.updateViewBox(this.viewExtent);
+      this.maybeSetViewBoxToDefault = false;
+      this.lineChart.updateViewBox(this.viewBox);
     }
   }
 
-  onViewExtentChanged(viewExtent: Extent) {
+  onViewBoxChanged(viewBox: Extent) {
     this.isViewExtentUpdated = true;
-    this.viewExtent = viewExtent;
-    this.updateProp();
+    this.viewBox = viewBox;
+    this.updateLineChart();
   }
 
-  onViewExtentReset() {
-    this.maybeSetViewExtentToDefault = true;
-    this.updateProp();
+  onViewBoxReset() {
+    this.maybeSetViewBoxToDefault = true;
+    this.updateLineChart();
   }
 
-  private getDefaultViewExtent(): Extent {
-    if (this.defaultViewExtent) {
-      return this.defaultViewExtent;
-    }
-
-    if (!this.dataExtent) {
-      return DEFAULT_EXTENT;
+  private getDefaultViewBox(): Extent {
+    if (this.defaultViewBox) {
+      return this.defaultViewBox;
     }
 
     return {

@@ -30,8 +30,6 @@ export interface ChartCallbacks {
 export interface BaseChartOption {
   callbacks: ChartCallbacks;
   domDimension: Dimension;
-  xScaleType: ScaleType;
-  yScaleType: ScaleType;
 }
 
 export interface SvgChartOption extends BaseChartOption {

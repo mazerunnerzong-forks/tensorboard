@@ -31,26 +31,38 @@ import {isWebGl2Supported} from './lib/utils';
 export function computeDataSeriesExtent(
   data: DataSeries[],
   metadataMap: DataSeriesMetadataMap
-): Extent {
+): {x: [number, number] | undefined; y: [number, number] | undefined} {
   let xMin = Infinity;
   let xMax = -Infinity;
   let yMin = Infinity;
   let yMax = -Infinity;
 
+  let xExtentChanged = false;
+  let yExtentChanged = false;
+
   for (const {id, points} of data) {
     const meta = metadataMap[id];
-    if (meta.aux || !meta.visible) {
-      continue;
-    }
+    if (!meta || meta.aux || !meta.visible) continue;
+
     for (let index = 0; index < points.length; index++) {
-      xMin = Math.min(xMin, points[index].x);
-      xMax = Math.max(xMax, points[index].x);
-      yMin = Math.min(yMin, points[index].y);
-      yMax = Math.max(yMax, points[index].y);
+      const {x, y} = points[index];
+      if (!Number.isNaN(x)) {
+        xMin = Math.min(xMin, x);
+        xMax = Math.max(xMax, x);
+        xExtentChanged = true;
+      }
+      if (!Number.isNaN(y)) {
+        yMin = Math.min(yMin, y);
+        yMax = Math.max(yMax, y);
+        yExtentChanged = true;
+      }
     }
   }
 
-  return {x: [xMin, xMax], y: [yMin, yMax]};
+  return {
+    x: xExtentChanged ? [xMin, xMax] : undefined,
+    y: yExtentChanged ? [yMin, yMax] : undefined,
+  };
 }
 
 export function getRendererType(
